@@ -1,0 +1,51 @@
+# .dockerignore sits next to the build context root and filters what
+# `docker build` sends to the daemon. It is the .gitignore of Docker builds.
+
+# --- node_modules: the #1 mistake ---
+# If this is missing, your HOST node_modules (macOS binaries, wrong platform,
+# gigabytes of junk) gets sent as build context and a stray COPY can bake it
+# into the image. Dependencies are installed INSIDE the image, never copied.
+node_modules
+**/node_modules
+
+# --- build artifacts: rebuilt inside the image ---
+.next
+**/.next
+dist
+**/dist
+
+# --- secrets and environment ---
+# NEVER ship these: `COPY . .` would bake them into a layer permanently,
+# even if you delete the file in a later instruction (it stays in layer
+# history). Runtime config goes in via -e / orchestrator env / secret manager.
+.env
+.env.*
+**/.env
+*.pem
+*.key
+
+# --- version control and CI ---
+.git
+.gitignore
+.github
+.gitlab-ci.yml
+
+# --- editor/OS noise (also just slows the build context upload) ---
+.vscode
+.idea
+.DS_Store
+*.log
+
+# --- docker files themselves ---
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+**/Dockerfile*
+**/.dockerignore
+
+# --- docs and tests not needed inside the image ---
+README.md
+LEARNING.md
+coverage
+**/*.test.ts
+**/*.spec.ts

@@ -1,5 +1,25 @@
 import { Controller, Get, Module, Post, Body } from '@nestjs/common';
-import { CreateJobDto, Job } from '@jobboard/shared';
+
+// Types previously shared via the monorepo's packages/shared are inlined here —
+// this branch is a standalone backend. In a real single-repo API you'd keep
+// them in a dedicated src/types.ts (or generate from a schema).
+export interface Job {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  salaryMin?: number;
+  salaryMax?: number;
+  createdAt: string;
+}
+
+export interface CreateJobDto {
+  title: string;
+  company: string;
+  location: string;
+  salaryMin?: number;
+  salaryMax?: number;
+}
 
 const jobs: Job[] = [
   {

@@ -1,51 +1,36 @@
-# .dockerignore sits next to the build context root and filters what
-# `docker build` sends to the daemon. It is the .gitignore of Docker builds.
+# .dockerignore filters what `docker build` sends to the daemon.
 
-# --- node_modules: the #1 mistake ---
-# If this is missing, your HOST node_modules (macOS binaries, wrong platform,
-# gigabytes of junk) gets sent as build context and a stray COPY can bake it
-# into the image. Dependencies are installed INSIDE the image, never copied.
+# Dependencies — installed INSIDE the image, never copied from the host.
 node_modules
-**/node_modules
 
-# --- build artifacts: rebuilt inside the image ---
-.next
-**/.next
+# Build artifacts — rebuilt inside the image.
 dist
-**/dist
+build
+*.tsbuildinfo
 
-# --- secrets and environment ---
-# NEVER ship these: `COPY . .` would bake them into a layer permanently,
-# even if you delete the file in a later instruction (it stays in layer
-# history). Runtime config goes in via -e / orchestrator env / secret manager.
+# Secrets — `COPY . .` would bake these into a layer permanently.
 .env
 .env.*
-**/.env
 *.pem
 *.key
 
-# --- version control and CI ---
+# Version control, CI, editor and OS noise.
 .git
 .gitignore
 .github
-.gitlab-ci.yml
-
-# --- editor/OS noise (also just slows the build context upload) ---
 .vscode
 .idea
 .DS_Store
 *.log
 
-# --- docker files themselves ---
+# Docker files themselves.
 Dockerfile*
 docker-compose*.yml
 .dockerignore
-**/Dockerfile*
-**/.dockerignore
 
-# --- docs and tests not needed inside the image ---
+# Docs and tests not needed inside the image.
 README.md
-LEARNING.md
+Dockerfile-usage.md
 coverage
-**/*.test.ts
 **/*.spec.ts
+**/*.test.ts

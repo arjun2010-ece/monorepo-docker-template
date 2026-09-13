@@ -67,3 +67,23 @@ Build success (the final lines say `naming to jobboard/web:1.0.0 ... done`) tell
 CI builds the image from the repo root (`docker build -t registry.io/jobboard/web:$SHA .`), pushes it to a registry, and the same tagged image is promoted staging → prod. Kubernetes (or ECS/Fly) runs it with the env vars, scaling on traffic independently of the backend — which is exactly why the frontend and backend live as separate images.
 
 Read `Dockerfile-usage.md` next to understand every line of the Dockerfile.
+
+## How to check the size of Docker images (is it optimised or not?)
+
+1. We need to first build the image with this command:
+
+   ```bash
+   docker build -t node-app .
+   ```
+
+   (`node-app` is just the name of the currently built image in the current directory `.` — on this branch, the real command is `docker build -t jobboard/web:1.0.0 .`)
+
+2. Once built, we need to fire this command and it will show us the image size:
+
+   ```bash
+   docker images
+   ```
+
+   Look at the `SIZE` column for your image (the `REPOSITORY`/`TAG` columns identify it).
+
+So whenever we are doing multistage builds, after every optimisation we can repeat the above 2 steps and it shows us how much the image shrank — e.g. this frontend drops from ~1.5GB if built in a single stage to ~200MB with the multistage Dockerfile.

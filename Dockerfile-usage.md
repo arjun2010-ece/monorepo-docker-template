@@ -1,6 +1,6 @@
-# `apps/web/Dockerfile` — Stage-by-Stage Walkthrough
+# `Dockerfile` — Stage-by-Stage Walkthrough (frontend)
 
-A beginner-friendly explanation of the Next.js production Dockerfile. Read this alongside the file itself — every instruction in it is covered here.
+A beginner-friendly explanation of the Next.js production Dockerfile in this repo. Read this alongside the file itself — every instruction in it is covered here.
 
 ## The big picture
 
@@ -25,12 +25,11 @@ runner  →  receives only 3 folders        (THIS becomes your image)
 ```
 Tells Docker to use the modern BuildKit parser for Dockerfile syntax. You almost always want this line; it just guarantees newer syntax works.
 
-```dockerfile
-#   docker build -f apps/web/Dockerfile -t jobboard/web:1.0.0 .
+The build is now dead simple compared to the monorepo — no `-f` flag needed because the Dockerfile is at the root, and the build context is simply the project folder:
+
+```bash
+docker build -t jobboard/web:1.0.0 .
 ```
-This documents the real build command, and the two parts of it confuse everyone at first:
-- `-f apps/web/Dockerfile` — where the Dockerfile lives.
-- `.` (the trailing dot) — the **build context**: the folder Docker is allowed to copy files *from*. Since a monorepo needs the root lockfile and `packages/shared/`, the context must be the repo root. That's why the Dockerfile can reference paths like `apps/web/...` even though it sits inside `apps/web/`.
 
 ---
 
@@ -44,33 +43,29 @@ FROM node:22-alpine AS deps
 ```dockerfile
 WORKDIR /app
 ```
-Creates `/app` and moves into it. Every relative path after this line (`./`, `apps/web/`) is relative to `/app`. It's the Docker equivalent of `mkdir + cd`.
+Creates `/app` and moves into it. Every relative path after this line is relative to `/app`. It's the Docker equivalent of `mkdir + cd`.
 
 ```dockerfile
 COPY package.json package-lock.json ./
-COPY apps/web/package.json apps/web/
-COPY apps/api/package.json apps/api/
-COPY packages/shared/package.json packages/shared/
 ```
-Here we copy **only the files that describe dependencies** — no source code yet. In a monorepo, `npm` at the root needs to see every workspace's `package.json` (the root `package.json` declares `workspaces: ["apps/*", "packages/*"]`), so we copy all four.
+We copy **only the files that describe dependencies** — no source code yet. In a single-app repo that's just the two manifest files (the monorepo version needed every workspace's `package.json` too; that's gone now).
 
 ```dockerfile
 RUN npm ci
 ```
 Installs everything the lockfile pins. Key points:
 
-- **`npm ci` vs `npm install`**: `ci` installs *exactly* the versions locked in `package-lock.json`, wipes any existing `node_modules` first, and fails if the lockfile disagrees with the `package.json`. That gives reproducible builds — the image you build today matches last month's. `npm install` can resolve to newer versions and produce a different image from the same code. Rule: `npm ci` inside Docker, always.
+- **`npm ci` vs `npm install`**: `ci` installs *exactly* the versions locked in `package-lock.json`, wipes any existing `node_modules` first, and fails if the lockfile disagrees with the `package.json`. That gives reproducible builds — the image you build today matches last month's. Rule: `npm ci` inside Docker, always.
 - **Why devDependencies are included**: the Next.js compiler and TypeScript are devDependencies, and stage 2 needs them to build. They get dropped later.
-- **Why `npm ci` at the root installs all workspaces**: that's how npm workspaces behave — one command, one hoisted `node_modules` tree covering every package.
 
 ### Why copy package files *before* source? (the caching trick)
 
 Docker caches the result of every instruction as a **layer**, and reuses a cached layer only if its inputs haven't changed. `npm ci`'s inputs are the package files — so:
 
 - You edit a React component → package files unchanged → the `npm ci` layer is reused instantly → only the build re-runs. CI takes ~1 minute.
-- If instead you wrote `COPY . .` first, *every* code edit would change the context and force a full re-install on every build. CI takes ~5 minutes.
+- If instead you wrote `COPY . .` first, *every* code edit would change the context and force a full re-install on every build.
 
-This ordering is the single biggest speed lever in the whole file.
+This ordering is the single biggest speed lever in the whole file. (Note: `COPY . .` in stage 2 is fine precisely because stage 1 already isolated the dependency install.)
 
 ---
 
@@ -82,23 +77,21 @@ FROM node:22-alpine AS builder
 A brand-new, empty image. Nothing from `deps` exists here — until we copy it in:
 
 ```dockerfile
-COPY --from=deps /app ./
+COPY --from=deps /app/node_modules ./node_modules
 ```
-`--from=deps` means "copy from the stage named `deps` instead of from the build context". This brings over the entire `/app` we prepared — `node_modules` and all the package files — into the builder's `/app`.
+`--from=deps` means "copy from the stage named `deps` instead of from the build context". This brings over the installed dependencies.
 
 ```dockerfile
-COPY apps/web apps/web
-COPY packages/shared packages/shared
+COPY . .
 ```
-Now the actual source code, copied from the build context (your repo). Note only `web` and `shared` — the builder never needs the API's source.
+Now the actual source code, copied from the build context (the whole project folder). Thanks to `.dockerignore`, this does **not** bring in your local `node_modules`, `.next`, `.env` files, or `.git` — those would either break the Linux build or leak secrets into a layer permanently.
 
 ```dockerfile
-WORKDIR /app/apps/web
 RUN npm run build
 ```
-Move into the app's own folder (where its `package.json` lives) and run the build script, which executes `next build`. Because `next.config.mjs` contains `output: 'standalone'`, this build produces an extra artifact: `.next/standalone/`.
+Runs `next build`. Because `next.config.mjs` contains `output: 'standalone'`, this produces an extra artifact: `.next/standalone/`.
 
-**What standalone actually is:** normally, running a built Next.js app still requires the full `node_modules` and the `next` CLI. With `standalone`, Next traces every import your server actually uses at runtime and emits a **self-contained folder**: a minimal `server.js` plus a tiny `node_modules` containing only what that server needs (often 90% smaller than the full one). It's Next.js doing the "prune dependencies for production" work for you — which is why this Dockerfile needs no `prod-deps` stage, unlike the NestJS one.
+**What standalone actually is:** normally, running a built Next.js app still requires the full `node_modules` and the `next` CLI. With `standalone`, Next traces every import your server actually uses at runtime and emits a **self-contained folder**: a minimal `server.js` plus a tiny `node_modules` containing only what that server needs (often 90% smaller than the full one). It's Next.js doing the "prune dependencies for production" work for you — which is why this Dockerfile needs no separate `prod-deps` stage, unlike a NestJS backend.
 
 Everything else in this stage — TypeScript, webpack caches, the full `node_modules`, your source — will simply be thrown away.
 
@@ -120,8 +113,8 @@ ENV NODE_ENV=production \
 ```
 Environment variables baked into the image (the `\` is just line continuation). Why these matter:
 
-- `NODE_ENV=production` — many libraries (Express, React, Next) take faster/leaner code paths and skip dev-only warnings.
-- `PORT=3000` — the standalone server reads this to decide which port to listen on. Keeping it as an env var (not hardcoded) means you can override it at runtime: `docker run -e PORT=8080`.
+- `NODE_ENV=production` — many libraries take faster/leaner code paths and skip dev-only warnings.
+- `PORT=3000` — the standalone server reads this to decide which port to listen on. It's an env var (not hardcoded) so you can override it at runtime: `docker run -e PORT=8080`.
 - `HOSTNAME=0.0.0.0` — subtle but critical. Inside a container, `localhost` is the container itself, unreachable from outside. The server must bind **all network interfaces** (`0.0.0.0`) for Docker's port mapping (`-p 3000:3000`) or Kubernetes to reach it. Forgetting this is the classic "works locally, connection refused in prod" bug.
 
 ```dockerfile
@@ -130,14 +123,14 @@ USER node
 From this point on, everything runs as the unprivileged `node` user (uid 1000, shipped with the official image) instead of root. If a vulnerability in your app is ever exploited, the attacker lands as a low-privilege user rather than owning the container. Two words, standard production hygiene.
 
 ```dockerfile
-COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
-COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=builder --chown=node:node /app/apps/web/public ./apps/web/public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/public ./public
 ```
 The payoff of the whole multistage setup — only these three things enter the final image:
 
-1. **`.next/standalone` → `./`** — the self-contained server (its `server.js` plus its pruned `node_modules`). This is your entire backend-for-the-frontend.
-2. **`.next/static`** — the compiled client JavaScript/CSS. Next does *not* include this in the standalone output (it assumes you might serve it from a CDN), so it must be copied separately. The path `./apps/web/.next/static` looks odd, but the standalone folder preserves your monorepo layout, so assets must land at that exact relative location for the server to find them.
+1. **`.next/standalone` → `./`** — the self-contained server (its `server.js` plus its pruned `node_modules`). This is your entire backend-for-the-frontend. In a single-app repo the paths are clean: the server lands at `/app/server.js`.
+2. **`.next/static`** — the compiled client JavaScript/CSS. Next does *not* include this in the standalone output (it assumes you might serve it from a CDN), so it must be copied separately, next to the server.
 3. **`public/`** — static files like images and fonts, same story.
 
 `--chown=node:node` makes these files owned by the `node` user. Without it, files copied from an earlier stage are owned by `root`, which conflicts with having just switched to a non-root user.
@@ -150,7 +143,7 @@ EXPOSE 3000
 Purely documentation — a note saying "this app listens on 3000". It does **not** publish the port (that's `docker run -p 3000:3000` at runtime, or the `ports:` section in compose/Kubernetes).
 
 ```dockerfile
-CMD ["node", "apps/web/server.js"]
+CMD ["node", "server.js"]
 ```
 The command the container runs when it starts. Two things to understand here:
 
@@ -163,8 +156,14 @@ The command the container runs when it starts. Two things to understand here:
 
 Follow your own code through the pipeline to cement it:
 
-1. Your React component (`page.tsx`) enters at **stage 2** via `COPY apps/web apps/web`.
+1. Your React component (`app/page.tsx`) enters at **stage 2** via `COPY . .`.
 2. `next build` compiles it into (a) compiled JS chunks in `.next/static`, (b) the server bundle inside `.next/standalone`.
 3. **Stage 3** then receives exactly those two outputs plus `public/` — and nothing else ever existed as far as the final image is concerned.
 
 That's the whole trick of multistage: the final image looks like the app was born production-ready, because all the construction mess stayed in stages that Docker discards.
+
+---
+
+## FAQ: why doesn't the `deps` stage remove devDependencies?
+
+Because devDependencies are exactly what the build stages need — and since `deps`/`builder` never ship, there is no reason to slim them down. The only place dev dependencies must be removed is the **final image** — and for Next.js, `output: 'standalone'` does that pruning for you inside the build. If stage 1 ran `npm ci --omit=dev`, stage 2 would fail with `sh: next: command not found`. The full `node_modules` never reaches the runner stage, which is the only place it would matter.

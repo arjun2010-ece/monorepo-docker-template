@@ -1,30 +1,18 @@
-# Local orchestration of the two production images.
-# In production this is replaced by Kubernetes manifests / ECS task defs /
-# Fly.toml — the IMAGES are identical, only the runtime environment changes.
+# Local run of the production image.
+# In production this is replaced by Kubernetes / ECS / Fly config — the
+# IMAGE is identical, only the runtime environment changes.
 
 services:
-  api:
-    image: jobboard/api:1.0.0
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    environment:
-      PORT: 3001
-      CORS_ORIGIN: http://localhost:3000
-    ports:
-      - "3001:3001"
-
   web:
     image: jobboard/web:1.0.0
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: Dockerfile
     environment:
       # Runtime config for the Next server (server-side fetches to the API).
-      # In production this would be an internal service DNS name
-      # (e.g. http://api:3001 behind a k8s Service), not localhost.
-      API_URL: http://api:3001
+      # Locally, host.docker.internal reaches an API running on your machine
+      # (see the backend-only branch of this repo). In production this is
+      # wherever the API is deployed — an internal service DNS name.
+      API_URL: http://host.docker.internal:3001
     ports:
       - "3000:3000"
-    depends_on:
-      - api

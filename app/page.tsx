@@ -1,7 +1,13 @@
-import { Job } from '@jobboard/shared';
+interface Job {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  createdAt: string;
+}
 
 // In a real app this page would be a server component fetching from the
-// NestJS API. Kept minimal — the point of this repo is the Dockerfiles.
+// NestJS API (deployed separately — see the backend-only branch of this repo).
 export default async function HomePage() {
   const res = await fetch(`${process.env.API_URL ?? 'http://localhost:3001'}/jobs`, {
     cache: 'no-store',

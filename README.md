@@ -53,6 +53,16 @@ curl http://localhost:3001/jobs
 
 Dev without Docker: `npm run start:dev`.
 
+## Bug check: is the Docker config actually correct?
+
+The quickest way to test whether the Dockerfile we wrote is right or not working is to fire the build — the build itself is the test:
+
+```bash
+docker build -t jobboard/api:1.0.0 .
+```
+
+Build success (the final lines say `naming to jobboard/api:1.0.0 ... done`) tells us that the Docker config written by us is working fine — all four stages (deps → builder → prod-deps → runner) completed and the image was assembled. If any instruction fails, the build stops and the error names the exact stage and line — fix that line and rebuild.
+
 ## Deployment context
 
 CI builds the image (`docker build -t registry.io/jobboard/api:$SHA .`), pushes it to a registry, and the same tagged image is promoted staging → prod. In Kubernetes the API runs as an internal service (not internet-facing), scales on CPU/request rate independently of the frontend, and gets its DB credentials from a secret manager — never from the image.

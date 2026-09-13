@@ -240,3 +240,14 @@ docker run --rm jobboard/api:1.0.0 ls /app
 ```
 
 Then experiment: delete a source file and rebuild (watch the `deps` layer stay `CACHED`), change `package.json` and rebuild (watch it re-run), and run `docker history jobboard/api:1.0.0` to see how layers stack.
+
+## 10. Bug check: is the Docker config actually correct?
+
+The quickest way to test whether the Dockerfiles we wrote are right or not working is to fire the build — the build itself is the test:
+
+```bash
+docker build -f apps/web/Dockerfile -t jobboard/web:1.0.0 .
+docker build -f apps/api/Dockerfile -t jobboard/api:1.0.0 .
+```
+
+Build success (the final lines say `naming to ... done`) tells us that the Docker config written by us is working fine — every stage (deps → builder → prod-deps → runner) completed and the image was assembled. If any instruction fails, the build stops and the error names the exact stage and line, e.g. `RUN npm ci` exited with code 1 — fix that line and rebuild.

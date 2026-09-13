@@ -52,6 +52,16 @@ docker compose up
 
 Dev without Docker: `npm run dev`.
 
+## Bug check: is the Docker config actually correct?
+
+The quickest way to test whether the Dockerfile we wrote is right or not working is to fire the build — the build itself is the test:
+
+```bash
+docker build -t jobboard/web:1.0.0 .
+```
+
+Build success (the final lines say `naming to jobboard/web:1.0.0 ... done`) tells us that the Docker config written by us is working fine — all three stages (deps → builder → runner) completed and the image was assembled. If any instruction fails, the build stops and the error names the exact stage and line — fix that line and rebuild.
+
 ## Deployment context
 
 CI builds the image from the repo root (`docker build -t registry.io/jobboard/web:$SHA .`), pushes it to a registry, and the same tagged image is promoted staging → prod. Kubernetes (or ECS/Fly) runs it with the env vars, scaling on traffic independently of the backend — which is exactly why the frontend and backend live as separate images.

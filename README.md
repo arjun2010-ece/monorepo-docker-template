@@ -251,3 +251,23 @@ docker build -f apps/api/Dockerfile -t jobboard/api:1.0.0 .
 ```
 
 Build success (the final lines say `naming to ... done`) tells us that the Docker config written by us is working fine — every stage (deps → builder → prod-deps → runner) completed and the image was assembled. If any instruction fails, the build stops and the error names the exact stage and line, e.g. `RUN npm ci` exited with code 1 — fix that line and rebuild.
+
+## 11. How to check the size of Docker images (is it optimised or not?)
+
+1. We need to first build the images with this command:
+
+   ```bash
+   docker build -t node-app .
+   ```
+
+   (`node-app` is just the name of the currently built image in the current directory `.` — on this monorepo branch, the real commands are `docker build -f apps/web/Dockerfile -t jobboard/web:1.0.0 .` and `docker build -f apps/api/Dockerfile -t jobboard/api:1.0.0 .`)
+
+2. Once built, we need to fire this command and it will show us the image size:
+
+   ```bash
+   docker images
+   ```
+
+   Look at the `SIZE` column for your images (the `REPOSITORY`/`TAG` columns identify them).
+
+So whenever we are doing multistage builds, after every optimisation we can repeat the above 2 steps and it shows us how much the images shrank — e.g. both apps drop from ~1.5GB if built in a single stage to ~150–200MB with the multistage Dockerfiles.

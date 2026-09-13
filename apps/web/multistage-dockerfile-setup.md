@@ -1,5 +1,7 @@
 # `apps/web/Dockerfile` — Stage-by-Stage Walkthrough
 
+```Useful Video to check: https://www.youtube.com/watch?v=rqyHjAWi6LI&t=1065s```
+
 A beginner-friendly explanation of the Next.js production Dockerfile. Read this alongside the file itself — every instruction in it is covered here.
 
 ## The big picture
